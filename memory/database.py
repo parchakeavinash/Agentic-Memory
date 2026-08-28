@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, text, JSON
 from sqlalchemy.orm import sessionmaker, Session
 from memory.config import settings
-from memory.models import Base, Episode
+from memory.models import Base, Episode, SemanticFact
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -76,6 +76,14 @@ def init_db() -> None:
                 conn.execute(text("ALTER TABLE episodes ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) DEFAULT 'default_user';"))
                 conn.execute(text("ALTER TABLE episodes ADD COLUMN IF NOT EXISTS start_message_id INTEGER;"))
                 conn.execute(text("ALTER TABLE episodes ADD COLUMN IF NOT EXISTS end_message_id INTEGER;"))
+                # semantic_facts table columns (created by create_all, migration for safety)
+                conn.execute(text("""
+                    DO $$ BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='semantic_facts') THEN
+                            NULL;
+                        END IF;
+                    END $$;
+                """))
                 conn.commit()
         except Exception as e:
             logger.warning(f"Schema column check notice: {e}")

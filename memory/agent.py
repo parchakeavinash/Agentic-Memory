@@ -1,10 +1,15 @@
+import logging
 from typing import Optional, List, Dict, Any
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 from memory.config import settings
 from memory.memory import ShortTermMemory
 from memory.episodic import EpisodicMemoryManager
+from memory.semantic import SemanticMemoryManager
 from memory.database import init_db
+
+logger = logging.getLogger(__name__)
+
 
 
 class MemoryAgent:
@@ -19,6 +24,7 @@ class MemoryAgent:
     def __init__(
         self,
         system_prompt: Optional[str] = None,
+      
         window_size: Optional[int] = None,
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -31,6 +37,7 @@ class MemoryAgent:
         self.model_name = model_name or settings.groq_model
         self.memory = ShortTermMemory(default_window_size=window_size)
         self.episodic = EpisodicMemoryManager()
+        self.semantic = SemanticMemoryManager()
 
         self.system_prompt = system_prompt or (
             "You are a conversational AI assistant with multi-layered memory.\n\n"
@@ -49,10 +56,19 @@ class MemoryAgent:
             "- Expand the answer only when the user explicitly asks for more detail."
         )
 
+        # temperature=0.7 — conversational, natural, slightly creative
         self.llm = ChatGroq(
             groq_api_key=self.api_key,
             model_name=self.model_name,
             temperature=0.7,
+        )
+
+        # temperature=0 — deterministic, strictly grounded, no hallucination
+        # Used for: episode extraction, conversation summarization
+        self.extraction_llm = ChatGroq(
+            groq_api_key=self.api_key,
+            model_name=self.model_name,
+            temperature=0,
         )
 
         self.last_prompt_debug = None
@@ -85,8 +101,25 @@ class MemoryAgent:
             min_similarity=settings.episodic_min_similarity,
         )
 
-        # 3. Assemble complete prompt payload
+        # 3. Retrieve relevant semantic facts (persistent user knowledge)
+        relevant_facts = self.semantic.search_facts(
+            query=user_input,
+            user_id=uid,
+            top_k=5,
+            min_similarity=0.45,
+        )
+
+        # 4. Assemble complete prompt payload
         messages: List[BaseMessage] = [SystemMessage(content=self.system_prompt)]
+
+        if relevant_facts:
+            facts_lines = "\n".join(
+                f"- {f['key'].replace('_', ' ').title()}: {f['value']}"
+                for f in relevant_facts
+            )
+            messages.append(SystemMessage(
+                content=f"What I know about you:\n{facts_lines}"
+            ))
 
         if summary:
             summary_prompt = (
@@ -125,6 +158,8 @@ class MemoryAgent:
             "window_size": self.memory.default_window_size,
             "has_summary": bool(summary),
             "summary_text": summary,
+            "semantic_facts_count": len(relevant_facts),
+            "semantic_facts_injected": relevant_facts,
             "episodic_count": len(relevant_episodes),
             "episodes_injected": relevant_episodes,
             "history_injected_count": len(history),
@@ -146,10 +181,23 @@ class MemoryAgent:
         self.memory.add_user_message(session_id=session_id, content=user_input, user_id=uid)
         self.memory.add_ai_message(session_id=session_id, content=response_text, user_id=uid)
 
-        # 6. Incrementally update running summary for messages outside the sliding window
+        # 6. Detect and store semantic facts from user message (background, non-blocking)
+        try:
+            result = self.semantic.process_message(
+                user_message=user_input,
+                user_id=uid,
+                llm=self.extraction_llm,
+            )
+            if result:
+                action, key, value = result
+                logger.info(f"Semantic memory [{action}]: {key} = {value}")
+        except Exception as e:
+            logger.warning(f"Semantic memory processing failed (non-critical): {e}")
+
+        # 7. Incrementally update running summary — use extraction_llm (temperature=0, no hallucination)
         self.memory.update_summary_if_needed(
             session_id=session_id,
-            llm=self.llm,
+            llm=self.extraction_llm,
             window_size=self.memory.default_window_size,
             user_id=uid,
         )
@@ -174,7 +222,7 @@ class MemoryAgent:
 
         extracted = self.episodic.extract_episode_from_conversation(
             messages=messages,
-            llm=self.llm,
+            llm=self.extraction_llm,  # temperature=0 — strictly grounded
             session_id=session_id,
             user_id=uid,
         )

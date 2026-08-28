@@ -123,3 +123,53 @@ class Episode(Base):
 
     def __repr__(self) -> str:
         return f"<Episode(id={self.id}, episode_id='{self.episode_id}', user_id='{self.user_id}', session_id='{self.session_id}')>"
+
+
+class SemanticFact(Base):
+    """
+    Represents a stable, persistent fact about a user extracted from conversation.
+    Semantic facts are user-scoped (not session-scoped) because facts like
+    "user prefers Python" should persist across all sessions.
+
+    Examples:
+        key="favorite_programming_language"  value="Python"
+        key="name"                           value="Avi"
+        key="current_project"                value="AI voice agent"
+        key="preferred_database"             value="PostgreSQL"
+
+    A fact is CREATED on first detection, UPDATED when a newer value is found,
+    and IGNORED when the same value already exists (idempotent).
+    """
+    __tablename__ = "semantic_facts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Strictly user-scoped — NOT session-scoped
+    user_id = Column(String(128), nullable=False, index=True)
+
+    # Normalized fact key (e.g. "favorite_programming_language")
+    key = Column(String(256), nullable=False)
+
+    # The actual value (e.g. "Python")
+    value = Column(Text, nullable=False)
+
+    # Original raw statement from the user that generated this fact
+    source = Column(Text, nullable=True)
+
+    # How confident the extractor is (0.0 - 1.0), reserved for future use
+    confidence = Column(String(8), nullable=False, default="1.0")
+
+    # Embedding of "key: value" for vector similarity retrieval
+    embedding = Column(VectorType(dim=3072), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        # Unique per user+key — enforces one canonical value per fact per user
+        Index("ix_semantic_user_key", "user_id", "key", unique=True),
+        Index("ix_semantic_user", "user_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SemanticFact(user_id='{self.user_id}', key='{self.key}', value='{self.value[:40]}')>"

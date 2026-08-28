@@ -8,7 +8,7 @@ from memory.config import settings
 
 def print_banner(current_user: str, current_session: str):
     print("=" * 65)
-    print("   🧠 AGENT MULTI-LAYERED MEMORY SYSTEM (SHORT + SUMMARY + EPISODIC) 🧠")
+    print("   🧠 AGENT MEMORY SYSTEM (SHORT + SUMMARY + EPISODIC + SEMANTIC) 🧠")
     print("=" * 65)
     print(f" • User ID            : {current_user} (Multi-Tenant Isolation)")
     print(f" • Session ID         : {current_session}")
@@ -20,6 +20,8 @@ def print_banner(current_user: str, current_session: str):
     print("Commands:")
     print("  /history            - View database messages & sliding window status")
     print("  /summary            - View condensed summary of older evicted turns")
+    print("  /facts              - List all semantic facts (persistent user knowledge)")
+    print("  /forget <key>       - Delete a specific semantic fact by key")
     print("  /episodes           - List all extracted episodic memories in vector DB")
     print("  /search <query>     - Semantic vector search for past episodes")
     print("  /create-episode     - Distill current session into a new structured episode")
@@ -32,8 +34,31 @@ def print_banner(current_user: str, current_session: str):
     print("  /help               - Show this command menu")
     print("  /exit               - Quit the application")
     print("=" * 65)
-    print("Tip: Discuss events or projects, run /create-episode to distill an experience,")
-    print("then ask questions across sessions to watch vector similarity recall in action!\n")
+    print("Tip: Just chat naturally. Semantic facts are auto-extracted from your messages.")
+    print("Use /facts to see what the agent has learned about you.\n")
+
+
+def display_facts(agent: MemoryAgent, current_user: str):
+    facts = agent.semantic.list_facts(user_id=current_user)
+
+    print("\n" + "=" * 65)
+    print(f"🧩 SEMANTIC MEMORY (Persistent Facts) — User: '{current_user}' — Total: {len(facts)}")
+    print("=" * 65)
+
+    if not facts:
+        print(" [No semantic facts stored yet. Just chat! Facts are auto-extracted from your messages.]")
+        print("=" * 65 + "\n")
+        return
+
+    for fact in facts:
+        updated = fact.updated_at.strftime("%Y-%m-%d %H:%M") if fact.updated_at else "N/A"
+        print(f"  {fact.key:<35} = {fact.value}")
+        if fact.source:
+            src_preview = fact.source[:65] + ("..." if len(fact.source) > 65 else "")
+            print(f"  {'':35}   (from: \"{src_preview}\")")
+        print(f"  {'':35}   [updated: {updated}]")
+        print()
+    print("=" * 65 + "\n")
 
 
 def display_history(agent: MemoryAgent, current_user: str, current_session: str):
@@ -239,6 +264,17 @@ def main():
                 display_history(agent, current_user, current_session)
             elif cmd == "/summary":
                 display_summary(agent, current_user, current_session)
+            elif cmd == "/facts":
+                display_facts(agent, current_user)
+            elif cmd == "/forget":
+                if not arg:
+                    print("Usage: /forget <key>  (e.g. /forget favorite_language)")
+                else:
+                    deleted = agent.semantic.delete_fact(user_id=current_user, key=arg)
+                    if deleted:
+                        print(f"\n🗑️ Deleted semantic fact: '{arg}' for User '{current_user}'\n")
+                    else:
+                        print(f"\n[No fact found with key '{arg}' for User '{current_user}']\n")
             elif cmd == "/episodes":
                 display_episodes(agent, current_user, current_session)
             elif cmd in ("/search", "/search-episodes", "/find"):
