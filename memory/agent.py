@@ -96,15 +96,20 @@ class MemoryAgent:
             messages.append(SystemMessage(content=summary_prompt))
 
         if relevant_episodes:
-            # Inject only the compact summary line — no verbose events dump.
-            # This prevents the LLM from mirroring assistant verbosity back to the user.
-            ep_lines = []
+            ep_parts = []
             for ep in relevant_episodes:
                 date_str = ep["timestamp"][:10] if ep.get("timestamp") else "N/A"
-                ep_lines.append(f"• [{date_str}] {ep['summary']}")
+                events_text = "\n".join(f"- {e}" for e in ep.get("events", [])) or "- (none)"
+                topics_text = ", ".join(ep.get("topics", [])) or "(none)"
+                ep_parts.append(
+                    f"Episode [{date_str}]\n\n"
+                    f"Summary:\n{ep['summary']}\n\n"
+                    f"Events:\n{events_text}\n\n"
+                    f"Topics:\n{topics_text}"
+                )
             ep_prompt = (
-                "Context from past conversations (use only if relevant):\n"
-                + "\n".join(ep_lines)
+                "Relevant Episodic Memory (use only if relevant to the current question):\n\n"
+                + "\n\n---\n\n".join(ep_parts)
             )
             messages.append(SystemMessage(content=ep_prompt))
 

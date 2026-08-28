@@ -82,30 +82,33 @@ class EpisodicMemoryManager:
         prompt = [
             SystemMessage(
                 content=(
-                    "You are a memory extraction system for an AI assistant.\n"
-                    "Extract a concise episodic memory from this conversation.\n\n"
-                    "Focus on:\n"
-                    "- What the USER said, decided, or is building\n"
-                    "- Projects, tools, technologies the user mentioned\n"
-                    "- Goals and intentions the user expressed\n"
-                    "- Important facts stated by the user\n\n"
-                    "DO NOT:\n"
-                    "- Summarize what the assistant said or explained\n"
-                    "- Mention that the assistant provided a guide, tutorial, or code\n"
-                    "- Include assistant response style or length\n"
-                    "- Copy large portions of the conversation\n"
-                    "- Include code unless it represents a key user decision\n\n"
+                    "You are a memory extraction system. Your job is to extract a factual record "
+                    "of what was discussed in the conversation transcript below.\n\n"
+                    "STRICT RULES:\n"
+                    "1. ONLY extract information that is explicitly present in the transcript.\n"
+                    "2. DO NOT add, infer, expand, or use any knowledge from outside the transcript.\n"
+                    "3. If something was not said in the transcript, do not include it.\n"
+                    "4. Events must describe what the USER asked or said — not what the assistant answered.\n"
+                    "5. DO NOT summarize assistant replies or add general knowledge the assistant mentioned.\n"
+                    "6. Topics must only reflect subjects the user explicitly raised.\n\n"
+                    "Good event example: 'User asked whether drinking too much water can be harmful.'\n"
+                    "Bad event example:  'Hot or cold drinks can irritate the stomach or throat.' "
+                    "(← this was not said by the user; do not add it)\n\n"
                     "Output MUST be valid JSON with this exact schema:\n"
                     "{\n"
-                    '  "summary": "1-2 short factual sentences about what the user is doing or building.",\n'
-                    '  "events": ["Fact or decision stated by user", "Another user action or goal"],\n'
-                    '  "topics": ["tag1", "tag2", "tag3"]\n'
+                    '  "summary": "1-2 sentences describing only what the user asked or discussed.",\n'
+                    '  "events": ["User asked X", "User mentioned Y"],\n'
+                    '  "topics": ["tag1", "tag2"]\n'
                     "}\n"
                     "Do NOT include markdown backticks or extra explanation. Return ONLY raw JSON."
                 )
             ),
             HumanMessage(
-                content=f"Conversation (User: {user_id}, Session: {session_id}):\n\n{transcript}\n\nExtracted Episode JSON:"
+                content=(
+                    f"Conversation transcript (User: {user_id}, Session: {session_id}):\n\n"
+                    f"{transcript}\n\n"
+                    "Extract the episode JSON using ONLY what appears in the transcript above:"
+                )
             ),
         ]
 
