@@ -1,5 +1,5 @@
 # Agent Memory System — Architecture, Implementation & Integration Guide
-### still working on approving the accuracy and latency
+### still working on to improve the accuracy and latency
 > **Target Audience:** Future AI Agents, Developers, and System Architects integrating this memory subsystem into existing assistants (e.g., Voice Assistants, Chatbots, Autonomous Agents).
 
 ---
